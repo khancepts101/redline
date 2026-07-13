@@ -2,9 +2,10 @@ services:
   prometheus:
     image: prom/prometheus:v3.4.2
     restart: unless-stopped
-    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d", "--enable-feature=exemplar-storage"]
     volumes:
       - ./prometheus.aws.yml:/etc/prometheus/prometheus.yml:ro
+      - ../alerts:/etc/prometheus/alerts:ro
       - prometheus-data:/prometheus
     ports: ["9090:9090"]
     mem_limit: 256m
@@ -16,6 +17,7 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: marcusolsson-json-datasource
     volumes:
       - ../grafana/provisioning:/etc/grafana/provisioning:ro
       - ../dashboards:/var/lib/grafana/dashboards:ro
@@ -64,6 +66,56 @@ services:
     environment: *glitchtip-env
     mem_limit: 384m
     depends_on: [postgres, redis]
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes: ["../alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"]
+    mem_limit: 64m
+
+  pushgateway:
+    image: prom/pushgateway:v1.11.1
+    restart: unless-stopped
+    mem_limit: 64m
+
+  demo:
+    build:
+      context: ..
+      args: {COMMAND: demo-service}
+    restart: unless-stopped
+    environment:
+      GLITCHTIP_DSN: ${GLITCHTIP_DSN:-}
+    mem_limit: 64m
+
+  loadgen:
+    build:
+      context: ..
+      args: {COMMAND: loadgen}
+    restart: unless-stopped
+    command: ["-url=http://demo:8080/api/work", "-rps=10", "-error-rate=0.08"]
+    mem_limit: 32m
+    depends_on: [demo]
+
+  cardinality-guard:
+    build:
+      context: ..
+      args: {COMMAND: cardinality-guard}
+    restart: unless-stopped
+    command: ["-prometheus=http://prometheus:9090", "-warn=10000", "-hard=50000"]
+    mem_limit: 64m
+    depends_on: [prometheus]
+
+  demo-cron:
+    build:
+      context: ..
+      args: {COMMAND: demo-cron-job}
+    restart: unless-stopped
+    environment:
+      PUSHGATEWAY_URL: http://pushgateway:9091
+      GLITCHTIP_DSN: ${GLITCHTIP_DSN:-}
+    mem_limit: 32m
+    depends_on: [pushgateway]
 
 volumes:
   prometheus-data: {}
