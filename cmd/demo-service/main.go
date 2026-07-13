@@ -27,6 +27,7 @@ func withDemoTrace(next http.Handler) http.Handler {
 			return
 		}
 		sc := trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled, Remote: true})
+		w.Header().Set("X-Trace-ID", traceID.String())
 		next.ServeHTTP(w, req.WithContext(trace.ContextWithRemoteSpanContext(req.Context(), sc)))
 	})
 }
