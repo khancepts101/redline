@@ -1,0 +1,21 @@
+groups:
+  - name: redline
+    rules:
+      - alert: RedlineHighErrorRate
+        expr: sum(rate(redline_errors_total[5m])) by (service) / sum(rate(redline_requests_total[5m])) by (service) > 0.05
+        for: 10m
+        annotations:
+          summary: High error rate for {{ $labels.service }}
+          runbook_url: https://github.com/khancepts101/redline/blob/main/docs/runbooks/high-error-rate.md
+      - alert: RedlineCronStale
+        expr: time() - redline_job_last_run_timestamp_seconds > 7200
+        for: 10m
+        annotations:
+          summary: Batch job has not completed recently
+          runbook_url: https://github.com/khancepts101/redline/blob/main/docs/runbooks/stale-job.md
+      - alert: CardinalityExplosion
+        expr: cardinality_guard_series_total > 50000
+        for: 5m
+        annotations:
+          summary: Metric {{ $labels.metric }} has excessive active series
+          runbook_url: https://github.com/khancepts101/redline/blob/main/docs/runbooks/cardinality.md

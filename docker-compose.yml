@@ -1,0 +1,60 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.4.2
+    command: ["--config.file=/etc/prometheus/prometheus.yml","--web.enable-lifecycle","--enable-feature=exemplar-storage"]
+    volumes: ["./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro","./alerts:/etc/prometheus/alerts:ro","prometheus-data:/prometheus"]
+    ports: ["9090:9090"]
+    depends_on: [alertmanager]
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes: ["./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"]
+    ports: ["9093:9093"]
+  grafana:
+    image: grafana/grafana:12.0.2
+    environment: ["GF_SECURITY_ADMIN_USER=admin","GF_SECURITY_ADMIN_PASSWORD=admin","GF_INSTALL_PLUGINS=marcusolsson-json-datasource"]
+    volumes: ["./grafana/provisioning:/etc/grafana/provisioning:ro","./dashboards:/var/lib/grafana/dashboards:ro","grafana-data:/var/lib/grafana"]
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+  pushgateway:
+    image: prom/pushgateway:v1.11.1
+    ports: ["9091:9091"]
+  demo:
+    build: {context: ., args: {COMMAND: demo-service}}
+    environment: ["GLITCHTIP_DSN=${GLITCHTIP_DSN:-}"]
+    ports: ["8080:8080"]
+  loadgen:
+    build: {context: ., args: {COMMAND: loadgen}}
+    command: ["-url=http://demo:8080/api/work","-rps=10","-error-rate=0.08"]
+    depends_on: [demo]
+  cardinality-guard:
+    build: {context: ., args: {COMMAND: cardinality-guard}}
+    depends_on: [prometheus]
+  demo-cron:
+    build: {context: ., args: {COMMAND: demo-cron-job}}
+    environment: ["PUSHGATEWAY_URL=http://pushgateway:9091","GLITCHTIP_DSN=${GLITCHTIP_DSN:-}"]
+    depends_on: [pushgateway]
+  postgres:
+    image: postgres:16-alpine
+    environment: ["POSTGRES_USER=glitchtip","POSTGRES_PASSWORD=glitchtip","POSTGRES_DB=glitchtip"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+  redis:
+    image: redis:7-alpine
+  glitchtip:
+    image: glitchtip/glitchtip:v5.1.1
+    environment: &glitchtip-env
+      DATABASE_URL: postgres://glitchtip:glitchtip@postgres:5432/glitchtip
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: local-development-change-me
+      PORT: "8000"
+      GLITCHTIP_DOMAIN: http://localhost:8000
+      DEFAULT_FROM_EMAIL: redline@localhost
+      EMAIL_URL: consolemail://
+    ports: ["8000:8000"]
+    depends_on: [postgres, redis]
+  glitchtip-worker:
+    image: glitchtip/glitchtip:v5.1.1
+    command: ./bin/run-celery-with-beat.sh
+    environment: *glitchtip-env
+    depends_on: [postgres, redis]
+volumes: {prometheus-data: {}, grafana-data: {}, postgres-data: {}}

@@ -1,0 +1,4 @@
+services:
+  demo:
+    environment:
+      GLITCHTIP_DSN: http://public-key@glitchtip:8000/1

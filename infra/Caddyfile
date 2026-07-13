@@ -1,0 +1,2 @@
+grafana.example.com { reverse_proxy localhost:3000 }
+errors.example.com { reverse_proxy localhost:8000 }
