@@ -26,4 +26,6 @@ cd /opt/redline
 umask 077
 PUBLIC_IP="$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')"
 printf 'GLITCHTIP_SECRET_KEY=%s\nGLITCHTIP_DOMAIN=http://%s:8000\n' "$(openssl rand -hex 32)" "$PUBLIC_IP" > .env.aws
+docker compose --env-file .env.aws -f infra/compose.aws.yml up -d postgres redis
+docker compose --env-file .env.aws -f infra/compose.aws.yml run --rm glitchtip ./manage.py migrate --noinput
 docker compose --env-file .env.aws -f infra/compose.aws.yml up -d
