@@ -27,9 +27,11 @@ GlitchTip needs its normal first-user/project setup. Copy the project's DSN into
 ```go
 r, _ := redline.New(redline.Config{Service: "billing", DSN: os.Getenv("GLITCHTIP_DSN")})
 http.Handle("/invoices/{id}", r.HTTP("/invoices/{id}", invoices))
+http.Handle("/metrics", promhttp.HandlerFor(prometheus.DefaultGatherer,
+    promhttp.HandlerOpts{EnableOpenMetrics: true}))
 ```
 
-Always pass a route template, not a raw path containing user IDs. HTTP status, gRPC code, method, route, and transport become bounded labels. For gRPC, pass `r.UnaryServerInterceptor()` and `r.StreamServerInterceptor()` to `grpc.NewServer`.
+Always pass a route template, not a raw path containing user IDs. HTTP status, gRPC code, method, route, and transport become bounded labels. OpenMetrics must be enabled on the scrape handler for exemplars to reach Prometheus. For gRPC, pass `r.UnaryServerInterceptor()` and `r.StreamServerInterceptor()` to `grpc.NewServer`.
 
 ### Metrics → trace → error
 
