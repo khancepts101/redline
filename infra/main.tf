@@ -1,6 +1,81 @@
-terraform { required_providers { aws = { source = "hashicorp/aws"; version = "~> 5.0" } } }
+terraform {
+  required_version = ">= 1.5"
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~> 6.0" }
+  }
+}
+
 provider "aws" { region = var.region }
-resource "aws_security_group" "redline" { name = "redline"; ingress { from_port=22;to_port=22;protocol="tcp";cidr_blocks=[var.ssh_cidr] }; ingress { from_port=80;to_port=80;protocol="tcp";cidr_blocks=["0.0.0.0/0"] }; ingress { from_port=443;to_port=443;protocol="tcp";cidr_blocks=["0.0.0.0/0"] }; egress { from_port=0;to_port=0;protocol="-1";cidr_blocks=["0.0.0.0/0"] } }
-resource "aws_instance" "redline" { ami=var.ami_id;instance_type=var.instance_type;key_name=var.key_name;vpc_security_group_ids=[aws_security_group.redline.id];root_block_device { volume_size=30;volume_type="gp3" };tags={Name="redline"} }
-resource "aws_eip" "redline" { instance=aws_instance.redline.id;domain="vpc" }
-output "public_ip" { value=aws_eip.redline.public_ip }
+
+data "aws_vpc" "default" { default = true }
+
+data "aws_ami" "ubuntu_arm64" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"]
+  }
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "aws_security_group" "redline" {
+  name_prefix = "redline-"
+  description = "Redline observability host"
+  vpc_id      = data.aws_vpc.default.id
+
+  dynamic "ingress" {
+    for_each = { ssh = 22, grafana = 3000, prometheus = 9090, glitchtip = 8000 }
+    content {
+      description = ingress.key
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = [var.admin_cidr]
+    }
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "redline" {
+  ami                         = data.aws_ami.ubuntu_arm64.id
+  instance_type               = var.instance_type
+  key_name                    = var.key_name
+  vpc_security_group_ids      = [aws_security_group.redline.id]
+  user_data                   = file("${path.module}/bootstrap.sh")
+  user_data_replace_on_change = true
+
+  metadata_options {
+    http_tokens = "required"
+  }
+
+  root_block_device {
+    volume_size           = 30
+    volume_type           = "gp3"
+    encrypted             = true
+    delete_on_termination = true
+  }
+
+  tags = { Name = "redline-observability" }
+}
+
+resource "aws_eip" "redline" {
+  instance = aws_instance.redline.id
+  domain   = "vpc"
+  tags     = { Name = "redline-observability" }
+}
+
+output "public_ip" { value = aws_eip.redline.public_ip }
+output "grafana_url" { value = "http://${aws_eip.redline.public_ip}:3000" }
+output "prometheus_url" { value = "http://${aws_eip.redline.public_ip}:9090" }
+output "glitchtip_url" { value = "http://${aws_eip.redline.public_ip}:8000" }
+output "ssh_command" { value = "ssh -i ~/.ssh/achilles.pem ubuntu@${aws_eip.redline.public_ip}" }

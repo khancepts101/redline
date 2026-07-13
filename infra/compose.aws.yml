@@ -1,0 +1,71 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.4.2
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./prometheus.aws.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports: ["9090:9090"]
+    mem_limit: 256m
+
+  grafana:
+    image: grafana/grafana:12.0.2
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["3000:3000"]
+    mem_limit: 256m
+    depends_on: [prometheus]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: glitchtip
+      POSTGRES_PASSWORD: glitchtip
+      POSTGRES_DB: glitchtip
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    mem_limit: 320m
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    mem_limit: 96m
+
+  glitchtip:
+    image: glitchtip/glitchtip:v5.1.1
+    restart: unless-stopped
+    environment: &glitchtip-env
+      DATABASE_URL: postgres://glitchtip:glitchtip@postgres:5432/glitchtip
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?required}
+      PORT: "8000"
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:?required}
+      DEFAULT_FROM_EMAIL: redline@localhost
+      EMAIL_URL: consolemail://
+      CELERY_WORKER_CONCURRENCY: "1"
+    ports: ["8000:8000"]
+    mem_limit: 384m
+    depends_on: [postgres, redis]
+
+  glitchtip-worker:
+    image: glitchtip/glitchtip:v5.1.1
+    restart: unless-stopped
+    command: ./bin/run-celery-with-beat.sh
+    environment: *glitchtip-env
+    mem_limit: 384m
+    depends_on: [postgres, redis]
+
+volumes:
+  prometheus-data: {}
+  grafana-data: {}
+  postgres-data: {}
