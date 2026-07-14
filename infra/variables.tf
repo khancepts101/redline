@@ -18,3 +18,9 @@ variable "admin_cidr" {
   description = "Public administrator IPv4 CIDR allowed to reach SSH and observability UIs"
   default     = "172.1.78.135/32"
 }
+
+variable "cardhunt_security_group_id" {
+  type        = string
+  description = "Security group attached to CardHunt ECS tasks"
+  default     = "sg-003d21f5e6fb8304c"
+}

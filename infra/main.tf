@@ -46,6 +46,15 @@ resource "aws_security_group" "redline" {
   }
 }
 
+resource "aws_vpc_security_group_ingress_rule" "cardhunt_glitchtip" {
+  security_group_id            = aws_security_group.redline.id
+  referenced_security_group_id = var.cardhunt_security_group_id
+  description                  = "GlitchTip ingestion from CardHunt ECS tasks"
+  ip_protocol                  = "tcp"
+  from_port                    = 8000
+  to_port                      = 8000
+}
+
 resource "aws_instance" "redline" {
   ami                         = data.aws_ami.ubuntu_arm64.id
   instance_type               = var.instance_type
