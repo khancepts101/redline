@@ -22,10 +22,26 @@ Open [Grafana](http://localhost:3000) (`admin` / `admin`) and choose **Redline /
 
 GlitchTip needs its normal first-user/project setup. Copy the project's DSN into `GLITCHTIP_DSN` and restart the demo containers. The official Sentry Go client speaks GlitchTip's Sentry-compatible ingestion protocol; no custom error client is involved.
 
+## AWS deployment
+
+The AWS stack terminates TLS with Caddy. Create DNS A records for the Grafana, GlitchTip, and Prometheus names pointing to the instance EIP, then pass those names and an ACME registration email to Terraform:
+
+```sh
+terraform -chdir=infra apply \
+  -var="admin_cidr=$ADMIN_CIDR" \
+  -var="grafana_domain=$GRAFANA_DOMAIN" \
+  -var="glitchtip_domain=$GLITCHTIP_DOMAIN" \
+  -var="prometheus_domain=$PROMETHEUS_DOMAIN" \
+  -var="acme_email=$ACME_EMAIL"
+```
+
+Only HTTPS and SSH are reachable from `admin_cidr`; port 80 is public solely for ACME validation and HTTPS redirects. Grafana and Prometheus have no direct host ports. GlitchTip ingestion and Pushgateway bind to the EC2 private address and are admitted from the configured client security group.
+
 ## Import and go
 
 ```go
 r, _ := redline.New(redline.Config{Service: "billing", DSN: os.Getenv("GLITCHTIP_DSN")})
+defer r.Close()
 http.Handle("/invoices/{id}", r.HTTP("/invoices/{id}", invoices))
 http.Handle("/metrics", promhttp.HandlerFor(prometheus.DefaultGatherer,
     promhttp.HandlerOpts{EnableOpenMetrics: true}))
@@ -45,6 +61,8 @@ err := job.Run(ctx)
 ```
 
 Set `PushgatewayURL` to push runs, failures, duration, and `redline_job_last_run_timestamp_seconds` when the process exits. Pushgateway retains metrics forever: absence does **not** mean a job is healthy or removed. Alert on the timestamp (the included rule does), and call `job.Delete()` during intentional decommissioning. OTLP metric export is the planned v2 path because it avoids Pushgateway persistence semantics.
+
+Job metrics live in a private registry. If `PushgatewayURL` is empty they are neither exposed by the service's normal `/metrics` handler nor pushed anywhere, and they disappear when the process exits.
 
 ## Cardinality guard
 

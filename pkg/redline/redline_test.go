@@ -30,6 +30,7 @@ func TestHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(r.Close)
 	h := r.HTTP("/ok", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }))
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/ok", nil))
 	if n := testutil.ToFloat64(r.requests.WithLabelValues("test", "http", "GET", "/ok", "204")); n != 1 {
@@ -38,6 +39,7 @@ func TestHTTP(t *testing.T) {
 }
 func TestPanicResponds500(t *testing.T) {
 	r, _ := New(Config{Service: "panic", Registry: prometheus.NewRegistry(), PanicMode: PanicRespond500})
+	t.Cleanup(r.Close)
 	w := httptest.NewRecorder()
 	r.HTTP("/panic", http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })).ServeHTTP(w, httptest.NewRequest("GET", "/panic", nil))
 	if w.Code != 500 {
@@ -50,6 +52,7 @@ func TestPanicResponds500(t *testing.T) {
 func TestHTTPPanicRepanicRecordsMetrics(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	r, _ := New(Config{Service: "repanic", Registry: reg, PanicMode: PanicRepanic})
+	t.Cleanup(r.Close)
 	h := r.HTTP("/panic", http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") }))
 	func() {
 		defer func() {
@@ -81,6 +84,7 @@ func TestHTTPPanicRepanicRecordsMetrics(t *testing.T) {
 func TestHTTPStatusPreservedOnPanicAfterWrite(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	r, _ := New(Config{Service: "svc", Registry: reg, PanicMode: PanicRespond500})
+	t.Cleanup(r.Close)
 	h := r.HTTP("/x", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(202)
 		panic("after write")
@@ -95,5 +99,25 @@ func TestHTTPStatusPreservedOnPanicAfterWrite(t *testing.T) {
 	}
 	if n := testutil.ToFloat64(r.requests.WithLabelValues("svc", "http", "GET", "/x", "500")); n != 0 {
 		t.Fatalf("requests{500}=%v, want 0", n)
+	}
+}
+
+func TestCloseStopsRateSamplerAndIsIdempotent(t *testing.T) {
+	r, err := New(Config{Service: "close", Registry: prometheus.NewRegistry()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+	select {
+	case <-r.done:
+	default:
+		t.Fatal("rate sampler did not stop")
+	}
+	r.Close()
+}
+
+func TestToStringPreservesPanicValue(t *testing.T) {
+	if got := toString(42); got != "42" {
+		t.Fatalf("toString(42)=%q, want 42", got)
 	}
 }

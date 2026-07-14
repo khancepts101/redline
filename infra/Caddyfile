@@ -1,2 +1,15 @@
-grafana.example.com { reverse_proxy localhost:3000 }
-errors.example.com { reverse_proxy localhost:8000 }
+{
+	email {$ACME_EMAIL}
+}
+
+{$GRAFANA_DOMAIN} {
+	reverse_proxy grafana:3000
+}
+
+{$GLITCHTIP_DOMAIN} {
+	reverse_proxy glitchtip:8000
+}
+
+{$PROMETHEUS_DOMAIN} {
+	reverse_proxy prometheus:9090
+}

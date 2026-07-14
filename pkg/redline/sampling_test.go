@@ -8,6 +8,7 @@ import (
 
 func TestShouldCaptureBelowThreshold(t *testing.T) {
 	r, _ := New(Config{Service: "s", Registry: prometheus.NewRegistry(), Sampling: SamplingConfig{FullCaptureRPS: 10, OneInN: 1000}})
+	t.Cleanup(r.Close)
 	// At or below FullCaptureRPS every event is captured regardless of OneInN.
 	for _, rate := range []uint64{0, 5, 10} {
 		r.lastRate.Store(rate)
@@ -19,6 +20,7 @@ func TestShouldCaptureBelowThreshold(t *testing.T) {
 
 func TestShouldCaptureAboveThresholdOneInOne(t *testing.T) {
 	r, _ := New(Config{Service: "s", Registry: prometheus.NewRegistry(), Sampling: SamplingConfig{FullCaptureRPS: 10, OneInN: 1}})
+	t.Cleanup(r.Close)
 	r.lastRate.Store(1000)
 	// OneInN==1 means rand.Uint64N(1) is always 0, so capture is deterministic.
 	for i := 0; i < 100; i++ {
@@ -30,6 +32,7 @@ func TestShouldCaptureAboveThresholdOneInOne(t *testing.T) {
 
 func TestShouldCaptureAboveThresholdSamples(t *testing.T) {
 	r, _ := New(Config{Service: "s", Registry: prometheus.NewRegistry(), Sampling: SamplingConfig{FullCaptureRPS: 10, OneInN: 5}})
+	t.Cleanup(r.Close)
 	r.lastRate.Store(1000)
 	captured := 0
 	const n = 20000

@@ -7,7 +7,6 @@ services:
       - ./prometheus.aws.yml:/etc/prometheus/prometheus.yml:ro
       - ../alerts:/etc/prometheus/alerts:ro
       - prometheus-data:/prometheus
-    ports: ["9090:9090"]
     mem_limit: 256m
 
   grafana:
@@ -22,7 +21,6 @@ services:
       - ../grafana/provisioning:/etc/grafana/provisioning:ro
       - ../dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
-    ports: ["3000:3000"]
     mem_limit: 256m
     depends_on: [prometheus]
 
@@ -51,11 +49,11 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?required}
       PORT: "8000"
-      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:?required}
+      GLITCHTIP_DOMAIN: https://${GLITCHTIP_DOMAIN:?required}
       DEFAULT_FROM_EMAIL: redline@localhost
       EMAIL_URL: consolemail://
       CELERY_WORKER_CONCURRENCY: "1"
-    ports: ["8000:8000"]
+    ports: ["${REDLINE_PRIVATE_IP:?required}:8000:8000"]
     mem_limit: 384m
     depends_on: [postgres, redis]
 
@@ -77,8 +75,24 @@ services:
   pushgateway:
     image: prom/pushgateway:v1.11.1
     restart: unless-stopped
-    ports: ["9091:9091"]
+    ports: ["${REDLINE_PRIVATE_IP:?required}:9091:9091"]
     mem_limit: 64m
+
+  caddy:
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?required}
+      GRAFANA_DOMAIN: ${GRAFANA_DOMAIN:?required}
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:?required}
+      PROMETHEUS_DOMAIN: ${PROMETHEUS_DOMAIN:?required}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    mem_limit: 96m
+    depends_on: [grafana, glitchtip, prometheus]
 
   demo:
     build:
@@ -122,3 +136,5 @@ volumes:
   prometheus-data: {}
   grafana-data: {}
   postgres-data: {}
+  caddy-data: {}
+  caddy-config: {}

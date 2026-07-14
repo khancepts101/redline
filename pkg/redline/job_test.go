@@ -15,6 +15,7 @@ func newJob(t *testing.T, mode PanicMode, fn func(context.Context) error) *JobRu
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(r.Close)
 	return r.Job("test_job", fn)
 }
 

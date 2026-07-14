@@ -17,6 +17,7 @@ func newRedline(t *testing.T, mode PanicMode) *Redline {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(r.Close)
 	return r
 }
 

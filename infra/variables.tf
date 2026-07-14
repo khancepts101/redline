@@ -24,3 +24,23 @@ variable "cardhunt_security_group_id" {
   description = "Security group attached to CardHunt ECS tasks"
   default     = "sg-003d21f5e6fb8304c"
 }
+
+variable "grafana_domain" {
+  type        = string
+  description = "Public DNS name for the Grafana HTTPS endpoint"
+}
+
+variable "glitchtip_domain" {
+  type        = string
+  description = "Public DNS name for the GlitchTip HTTPS endpoint"
+}
+
+variable "prometheus_domain" {
+  type        = string
+  description = "Public DNS name for the Prometheus HTTPS endpoint"
+}
+
+variable "acme_email" {
+  type        = string
+  description = "Email used for ACME certificate registration"
+}

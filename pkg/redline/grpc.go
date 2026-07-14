@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -59,5 +58,3 @@ func (r *Redline) recordRPC(ctx context.Context, transport, method string, start
 	r.observe(r.duration.WithLabelValues(r.cfg.Service, transport, method, method), after.Sub(start).Seconds(), ctx)
 	r.overhead.WithLabelValues(r.cfg.Service, transport).Observe(time.Since(after).Seconds())
 }
-
-var _ prometheus.Observer

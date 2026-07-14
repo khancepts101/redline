@@ -19,6 +19,9 @@ type JobRunner struct {
 	last     prometheus.Gauge
 }
 
+// Job wraps a batch operation with run, failure, duration, and staleness
+// metrics. Job metrics use a private registry: configure PushgatewayURL or the
+// metrics remain process-local and disappear when the job exits.
 func (r *Redline) Job(name string, fn func(context.Context) error) *JobRunner {
 	reg := prometheus.NewRegistry()
 	j := &JobRunner{r: r, name: name, fn: fn, registry: reg, runs: prometheus.NewCounter(prometheus.CounterOpts{Name: "redline_job_runs_total", Help: "Completed job runs."}), failures: prometheus.NewCounter(prometheus.CounterOpts{Name: "redline_job_failures_total", Help: "Failed job runs."}), duration: prometheus.NewHistogram(prometheus.HistogramOpts{Name: "redline_job_duration_seconds", Help: "Job duration."}), last: prometheus.NewGauge(prometheus.GaugeOpts{Name: "redline_job_last_run_timestamp_seconds", Help: "Unix time of last completion; alert on staleness."})}

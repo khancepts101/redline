@@ -3,10 +3,12 @@ package redline
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -47,6 +49,9 @@ type Redline struct {
 	rate     atomic.Uint64
 	lastRate atomic.Uint64
 	sentry   *sentry.Client
+	stop     chan struct{}
+	done     chan struct{}
+	close    sync.Once
 }
 
 func New(cfg Config) (*Redline, error) {
@@ -68,7 +73,7 @@ func New(cfg Config) (*Redline, error) {
 	if cfg.Sampling.OneInN == 0 {
 		cfg.Sampling.OneInN = 10
 	}
-	r := &Redline{cfg: cfg}
+	r := &Redline{cfg: cfg, stop: make(chan struct{}), done: make(chan struct{})}
 	r.requests = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "redline_requests_total", Help: "HTTP and RPC requests."}, []string{"service", "transport", "method", "route", "code"})
 	r.errors = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "redline_errors_total", Help: "Errors classified by type."}, []string{"service", "transport", "method", "route", "class"})
 	r.duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "redline_request_duration_seconds", Help: "Request duration with trace exemplars.", Buckets: cfg.Buckets}, []string{"service", "transport", "method", "route"})
@@ -94,9 +99,28 @@ func New(cfg Config) (*Redline, error) {
 func (r *Redline) measureRate() {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-	for range t.C {
-		r.lastRate.Store(r.rate.Swap(0))
+	defer close(r.done)
+	for {
+		select {
+		case <-t.C:
+			r.lastRate.Store(r.rate.Swap(0))
+		case <-r.stop:
+			return
+		}
 	}
+}
+
+// Close stops Redline's rate-sampling goroutine and flushes pending error
+// events. Call it when a Redline instance has a shorter lifetime than the
+// process, including in tests that construct instances repeatedly.
+func (r *Redline) Close() {
+	r.close.Do(func() {
+		close(r.stop)
+		<-r.done
+		if r.sentry != nil {
+			r.sentry.Flush(2 * time.Second)
+		}
+	})
 }
 
 type statusWriter struct {
@@ -204,13 +228,7 @@ func (r *Redline) capture(ctx context.Context, value any) {
 	r.sentry.CaptureEvent(event, nil, nil)
 }
 func toString(v any) string {
-	if e, ok := v.(error); ok {
-		return e.Error()
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return "non-string panic"
+	return fmt.Sprint(v)
 }
 
 type loggerKey struct{}

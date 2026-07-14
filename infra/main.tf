@@ -28,7 +28,7 @@ resource "aws_security_group" "redline" {
   vpc_id      = data.aws_vpc.default.id
 
   dynamic "ingress" {
-    for_each = { ssh = 22, grafana = 3000, prometheus = 9090, glitchtip = 8000 }
+    for_each = { ssh = 22, https = 443 }
     content {
       description = ingress.key
       from_port   = ingress.value
@@ -36,6 +36,14 @@ resource "aws_security_group" "redline" {
       protocol    = "tcp"
       cidr_blocks = [var.admin_cidr]
     }
+  }
+
+  ingress {
+    description = "HTTP for ACME validation and HTTPS redirect"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -65,11 +73,18 @@ resource "aws_vpc_security_group_ingress_rule" "cardhunt_pushgateway" {
 }
 
 resource "aws_instance" "redline" {
-  ami                         = data.aws_ami.ubuntu_arm64.id
-  instance_type               = var.instance_type
-  key_name                    = var.key_name
-  vpc_security_group_ids      = [aws_security_group.redline.id]
-  user_data                   = file("${path.module}/bootstrap.sh")
+  ami                    = data.aws_ami.ubuntu_arm64.id
+  instance_type          = var.instance_type
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.redline.id]
+  user_data = join("\n", [
+    "#!/usr/bin/env bash",
+    "export GRAFANA_DOMAIN=${jsonencode(var.grafana_domain)}",
+    "export GLITCHTIP_DOMAIN=${jsonencode(var.glitchtip_domain)}",
+    "export PROMETHEUS_DOMAIN=${jsonencode(var.prometheus_domain)}",
+    "export ACME_EMAIL=${jsonencode(var.acme_email)}",
+    replace(file("${path.module}/bootstrap.sh"), "#!/usr/bin/env bash\n", "")
+  ])
   user_data_replace_on_change = true
 
   metadata_options {
@@ -93,7 +108,7 @@ resource "aws_eip" "redline" {
 }
 
 output "public_ip" { value = aws_eip.redline.public_ip }
-output "grafana_url" { value = "http://${aws_eip.redline.public_ip}:3000" }
-output "prometheus_url" { value = "http://${aws_eip.redline.public_ip}:9090" }
-output "glitchtip_url" { value = "http://${aws_eip.redline.public_ip}:8000" }
+output "grafana_url" { value = "https://${var.grafana_domain}" }
+output "prometheus_url" { value = "https://${var.prometheus_domain}" }
+output "glitchtip_url" { value = "https://${var.glitchtip_domain}" }
 output "ssh_command" { value = "ssh -i ~/.ssh/achilles.pem ubuntu@${aws_eip.redline.public_ip}" }
