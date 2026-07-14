@@ -72,6 +72,15 @@ resource "aws_vpc_security_group_ingress_rule" "cardhunt_pushgateway" {
   to_port                      = 9091
 }
 
+resource "aws_vpc_security_group_ingress_rule" "achilles_pushgateway" {
+  security_group_id            = aws_security_group.redline.id
+  referenced_security_group_id = var.achilles_security_group_id
+  description                  = "Pushgateway ingestion from Achilles scheduler jobs"
+  ip_protocol                  = "tcp"
+  from_port                    = 9091
+  to_port                      = 9091
+}
+
 resource "aws_instance" "redline" {
   ami                    = data.aws_ami.ubuntu_arm64.id
   instance_type          = var.instance_type

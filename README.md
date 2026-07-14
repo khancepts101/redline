@@ -35,7 +35,7 @@ terraform -chdir=infra apply \
   -var="acme_email=$ACME_EMAIL"
 ```
 
-Only HTTPS and SSH are reachable from `admin_cidr`; port 80 is public solely for ACME validation and HTTPS redirects. Grafana and Prometheus have no direct host ports. GlitchTip ingestion and Pushgateway bind to the EC2 private address and are admitted from the configured client security group.
+Only HTTPS and SSH are reachable from `admin_cidr`; port 80 is public solely for ACME validation and HTTPS redirects. Grafana and Prometheus have no direct host ports. GlitchTip ingestion and Pushgateway bind to the EC2 private address and are admitted from the configured client security groups.
 
 ## Import and go
 

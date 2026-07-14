@@ -25,6 +25,12 @@ variable "cardhunt_security_group_id" {
   default     = "sg-003d21f5e6fb8304c"
 }
 
+variable "achilles_security_group_id" {
+  type        = string
+  description = "Security group attached to the Achilles scheduler host"
+  default     = "sg-07e87412a2eb58b2d"
+}
+
 variable "grafana_domain" {
   type        = string
   description = "Public DNS name for the Grafana HTTPS endpoint"
